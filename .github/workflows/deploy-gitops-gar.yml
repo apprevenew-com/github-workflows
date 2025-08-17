@@ -128,12 +128,12 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
 
+    if: inputs.gitops_repository != '' && secrets.PAT != ''
+
     env:
       PAT: ${{ secrets.PAT }}
       IMAGE_NAME: ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
       TAG: ${{ github.event.release.tag_name }}
-
-    if: inputs.gitops_repository != '' && env.PAT != ''
 
     steps:
       - name: Compute event-type for GitOps repository
