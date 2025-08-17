@@ -94,7 +94,7 @@ jobs:
       - uses: google-github-actions/auth@v2
         with:
           create_credentials_file: true
-          credentials_json: ${{ secrets.GCR_SERVICE_ACCOUNT_KEY }}
+          credentials_json: ${{ secrets.GAR_CREDENTIALS }}
 
       - uses: google-github-actions/setup-gcloud@v2
 
