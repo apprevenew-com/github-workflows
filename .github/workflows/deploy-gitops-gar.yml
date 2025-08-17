@@ -1,0 +1,190 @@
+name: Build & Push to GAR & Dispatch to GitOps Repository
+
+on:
+  workflow_call:
+    inputs:
+      gcp_project_id:
+        description: "GCP project ID"
+        required: true
+        type: string
+      gar_registry:
+        description: "GAR host (e.g. asia-southeast1-docker.pkg.dev)"
+        required: true
+        type: string
+      image_name:
+        description: "Image name; default = current repo name"
+        required: false
+        default: ""
+        type: string
+      tag_prefix:
+        description: "Deploy only if release tag starts with this prefix"
+        required: false
+        default: "v"
+        type: string
+      allow_prerelease:
+        description: "Allow deploying GitHub prereleases"
+        required: false
+        default: false
+        type: boolean
+      dockerfile:
+        description: "Path to Dockerfile"
+        required: false
+        default: "Dockerfile"
+        type: string
+      context:
+        description: "Docker build context"
+        required: false
+        default: "."
+        type: string
+      gitops_repository:
+        description: "Target repo for repository_dispatch (e.g. your-org/gitops). Empty to skip."
+        required: false
+        default: ""
+        type: string
+      gitops_repository_event_type:
+        description: "Fixed event-type (e.g., image-updates-app). If empty, uses prefix+image_name."
+        required: false
+        default: ""
+        type: string
+      gitops_repository_event_prefix:
+        description: "Prefix for dynamic event-type (e.g., image-updates-)"
+        required: false
+        default: "image-updates-"
+        type: string
+      gitops_repository_include_app_field:
+        description: 'Whether to include {"app":"<image_name>"} in payload'
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      GAR_CREDENTIALS:
+        required: true
+      PAT:
+        required: false
+
+concurrency:
+  group: deploy-${{ github.event.release.tag_name || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & Push to GAR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      startsWith(github.event.release.tag_name, inputs.tag_prefix) &&
+      (inputs.allow_prerelease || !github.event.release.prerelease)
+
+    env:
+      GAR_REGISTRY: ${{ inputs.gar_registry }}
+      GCP_PROJECT:  ${{ inputs.gcp_project_id }}
+      IMAGE_NAME:   ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
+      TAG:          ${{ github.event.release.tag_name }}
+      PAT:          ${{ secrets.PAT }}  # used only if GitOps dispatch is enabled
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.release.tag_name }}
+
+      - id: git-sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - uses: google-github-actions/auth@v2
+        with:
+          create_credentials_file: true
+          credentials_json: ${{ secrets.GCR_SERVICE_ACCOUNT_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker $GAR_REGISTRY --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: img
+        run: |
+          echo "repo=${GAR_REGISTRY}/${GCP_PROJECT}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          echo "tag_sha=${{ env.TAG }}-${{ steps.git.outputs.sha_short }}" >> $GITHUB_OUTPUT
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.img.outputs.repo }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
+            type=semver,pattern={{major}},value=${{ env.TAG }}
+            type=raw,value=latest
+            type=raw,value=${{ steps.img.outputs.tag_sha }}
+
+      - name: Build & Push image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            GH_PAT=${{ secrets.PAT }}
+
+      - id: ref
+        run: echo "image_digest=${{ steps.img.outputs.repo }}@${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+
+  dispatch-gitops-repository:
+    name: Dispatch to GitOps Repository
+    needs: [build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute event-type for GitOps repository
+        id: et
+        if: inputs.gitops_repository != '' && env.PAT != ''
+        run: |
+          if [ -n "${{ inputs.gitops_repository_event_type }}" ]; then
+            echo "event_type=${{ inputs.gitops_repository_event_type }}" >> $GITHUB_OUTPUT
+          else
+            echo "event_type=${{ inputs.gitops_repository_event_prefix }}${{ env.IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build GitOps repository payload
+        id: ap
+        if: inputs.gitops_repository != '' && env.PAT != ''
+        run: |
+          TAG_SHA='${{ needs.build.outputs.img.outputs.tag_sha }}'
+          RELEASE_TAG='${{ env.TAG }}'
+          IMAGE_REPO='${{ needs.build.outputs.img.outputs.repo }}'
+          IMAGE_DIGEST='${{ needs.build.outputs.ref.outputs.image_digest }}'
+          APP='${{ env.IMAGE_NAME }}'
+
+          jq -n \
+             --arg tag "$TAG_SHA" \
+             --arg image_ref "$IMAGE_DIGEST" \
+             --arg image_repo "$IMAGE_REPO" \
+             --arg image_tag_sha "$TAG_SHA" \
+             --arg release_tag "$RELEASE_TAG" \
+             --arg commit "${{ github.sha }}" \
+             '{tag:$tag, image_ref:$image_ref, image_repo:$image_repo, image_tag_sha:$image_tag_sha, release_tag:$release_tag, commit:$commit}' \
+             > payload.json
+
+          if [ "${{ inputs.gitops_repository_include_app_field }}" = "true" ]; then
+            jq --arg app "$APP" '. + {app:$app}' payload.json > payload.tmp && mv payload.tmp payload.json
+          fi
+
+          {
+            echo 'payload<<EOF'
+            cat payload.json
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: GitOps Repository Dispatch
+        if: inputs.gitops_repository != '' && env.PAT != ''
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ env.PAT }}
+          repository: ${{ inputs.gitops_repository }}
+          event-type: ${{ steps.et.outputs.event_type }}
+          client-payload: ${{ steps.ap.outputs.payload }}

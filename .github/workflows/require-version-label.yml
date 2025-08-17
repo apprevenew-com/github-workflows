@@ -1,0 +1,42 @@
+name: Require version label (strict)
+
+on:
+  workflow_call:
+    inputs:
+      base-branch:
+        description: "Only enforce for PRs into this branch"
+        required: false
+        default: "main"
+        type: string
+    outputs: {}
+    secrets: {}
+
+jobs:
+  guard:
+    if: github.event.pull_request.base.ref == inputs.base-branch
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    env:
+      LABEL_MAJOR: version:major
+      LABEL_MINOR: version:minor
+      LABEL_PATCH: version:patch
+      LABEL_NONE:  version:none
+    steps:
+      - name: Validate version label
+        run: |
+          set -euo pipefail
+          mapfile -t LABELS < <(jq -r '.pull_request.labels[].name' <<< '${{ toJson(github.event) }}')
+          count=0
+          for L in "${LABELS[@]}"; do
+            case "$L" in
+              "${LABEL_MAJOR}"|"${LABEL_MINOR}"|"${LABEL_PATCH}"|"${LABEL_NONE}")
+                count=$((count+1))
+                ;;
+            esac
+          done
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Exactly one version label required (${LABEL_MAJOR} | ${LABEL_MINOR} | ${LABEL_PATCH} | ${LABEL_NONE}). Found $count: ${LABELS[*]:-none}"
+            exit 1
+          fi
+          echo "✅ Version label OK."
