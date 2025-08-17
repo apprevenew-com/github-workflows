@@ -128,7 +128,7 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
 
-    if: inputs.gitops_repository != '' && secrets.PAT != ''
+    if: inputs.gitops_repository != '' && secrets.PAT != null
 
     env:
       PAT: ${{ secrets.PAT }}
