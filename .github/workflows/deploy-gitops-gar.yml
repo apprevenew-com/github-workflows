@@ -128,7 +128,7 @@ jobs:
     needs: [build]
     runs-on: ubuntu-latest
 
-    if: inputs.gitops_repository != '' && secrets.PAT != null
+    if: inputs.gitops_repository != ''
 
     env:
       PAT: ${{ secrets.PAT }}
@@ -138,6 +138,7 @@ jobs:
     steps:
       - name: Compute event-type for GitOps repository
         id: et
+        if: env.PAT != ''
         run: |
           if [ -n "${{ inputs.gitops_repository_event_type }}" ]; then
             echo "event_type=${{ inputs.gitops_repository_event_type }}" >> $GITHUB_OUTPUT
@@ -147,6 +148,7 @@ jobs:
 
       - name: Build GitOps repository payload
         id: ap
+        if: env.PAT != ''
         run: |
           TAG_SHA='${{ needs.build.outputs.img.outputs.tag_sha }}'
           RELEASE_TAG='${{ env.TAG }}'
@@ -175,6 +177,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: GitOps Repository Dispatch
+        if: env.PAT != ''
         uses: peter-evans/repository-dispatch@v3
         with:
           token: ${{ env.PAT }}
