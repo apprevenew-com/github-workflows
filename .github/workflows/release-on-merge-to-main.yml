@@ -1,0 +1,134 @@
+name: Release on merge to main
+
+on:
+  workflow_call:
+    inputs:
+      base-branch:
+        required: false
+        default: "main"
+        type: string
+      tag-prefix:
+        required: false
+        default: "v"
+        type: string
+      fail-if-multi-labels:
+        required: false
+        default: true
+        type: boolean
+    secrets:
+      PAT:
+        required: true
+
+concurrency:
+  group: release-${{ github.repository }}-${{ inputs.base-branch }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true && github.event.pull_request.base.ref == inputs.base-branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: read
+
+    env:
+      LABEL_MAJOR: version:major
+      LABEL_MINOR: version:minor
+      LABEL_PATCH: version:patch
+      LABEL_NONE:  version:none
+      TAG_PREFIX:  ${{ inputs.tag-prefix }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Detect bump from PR labels (strict by default)
+        id: bump
+        run: |
+          set -euo pipefail
+          mapfile -t LABELS < <(jq -r '.pull_request.labels[].name' <<< '${{ toJson(github.event) }}')
+
+          part=""
+          count=0
+          for L in "${LABELS[@]}"; do
+            case "$L" in
+              "${LABEL_MAJOR}") part="major"; count=$((count+1));;
+              "${LABEL_MINOR}") part="minor"; count=$((count+1));;
+              "${LABEL_PATCH}") part="patch"; count=$((count+1));;
+              "${LABEL_NONE}")  part="none";  count=$((count+1));;
+            esac
+          done
+
+          if [ "${{ inputs.fail-if-multi-labels }}" = "true" ] && [ "$count" -ne 1 ]; then
+            echo "::error::Exactly one version label required. Found $count: ${LABELS[*]:-none}"
+            exit 1
+          fi
+
+          if [ -z "$part" ]; then
+            echo "No version label found"; exit 1
+          fi
+
+          echo "part=$part" >> $GITHUB_OUTPUT
+
+      - name: Skip if version:none
+        id: skip
+        run: |
+          if [ "${{ steps.bump.outputs.part }}" = "none" ]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Compute next version
+        id: version
+        if: steps.skip.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          PART='${{ steps.bump.outputs.part }}'
+          PREFIX='${{ env.TAG_PREFIX }}'
+
+          LAST_TAG=$(git tag --list "${PREFIX}[0-9]*" --sort=-v:refname \
+                     | grep -E "^${PREFIX}[0-9]+\.[0-9]+\.[0-9]+$" \
+                     | head -n1)
+          [ -z "$LAST_TAG" ] && LAST_TAG="${PREFIX}0.0.0"
+
+          CORE="${LAST_TAG#${PREFIX}}"
+          MAJOR=${CORE%%.*}; REST=${CORE#*.}
+          MINOR=${REST%%.*}; PATCH=${REST#*.}
+
+          case "$PART" in
+            major) MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR+1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH+1)) ;;
+          esac
+
+          NEXT_TAG="${PREFIX}${MAJOR}.${MINOR}.${PATCH}"
+          echo "next=$NEXT_TAG"  >> $GITHUB_OUTPUT
+
+      - name: Create and push git tag
+        if: steps.skip.outputs.skip == 'false'
+        run: |
+          TAG='${{ steps.version.outputs.next }}'
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            echo "Tag ${TAG} already exists. Exiting."
+            exit 0
+          fi
+          git config user.name  "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git tag "${TAG}" -m "Release ${TAG} (from PR #${{ github.event.pull_request.number }})"
+          git push origin "${TAG}"
+
+      - name: Create GitHub Release (auto notes)
+        if: steps.skip.outputs.skip == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.next }}
+          name:     ${{ steps.version.outputs.next }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+
+      - name: Log skip
+        if: steps.skip.outputs.skip == 'true'
+        run: echo "version:none → skipping release & tag"
