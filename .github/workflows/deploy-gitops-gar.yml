@@ -71,6 +71,12 @@ jobs:
     name: Build & Push to GAR
     runs-on: ubuntu-latest
     timeout-minutes: 30
+
+    outputs:
+      tag_sha: ${{ steps.img.outputs.tag_sha }}
+      repo: ${{ steps.img.outputs.repo }}
+      image_digest: ${{ steps.ref.outputs.image_digest }}
+
     if: |
       startsWith(github.event.release.tag_name, inputs.tag_prefix) &&
       (inputs.allow_prerelease || !github.event.release.prerelease)
@@ -150,10 +156,10 @@ jobs:
         id: ap
         if: env.PAT != ''
         run: |
-          TAG_SHA='${{ needs.build.outputs.img.outputs.tag_sha }}'
+          TAG_SHA='${{ needs.build.outputs.tag_sha }}'
           RELEASE_TAG='${{ env.TAG }}'
-          IMAGE_REPO='${{ needs.build.outputs.img.outputs.repo }}'
-          IMAGE_DIGEST='${{ needs.build.outputs.ref.outputs.image_digest }}'
+          IMAGE_REPO='${{ needs.build.outputs.repo }}'
+          IMAGE_DIGEST='${{ needs.build.outputs.image_digest }}'
           APP='${{ env.IMAGE_NAME }}'
 
           jq -n \
