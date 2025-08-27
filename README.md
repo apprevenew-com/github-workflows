@@ -33,6 +33,8 @@ jobs:
     uses: apprevenew-com/github-workflows/.github/workflows/release-on-merge-to-main.yml@v1
     secrets:
       PAT: ${{ secrets.PAT }}
+    with:
+      base-branch: "main"
 ```
 
 ## require-version-label
