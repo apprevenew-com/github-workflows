@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy:
-    uses: apprevenew-com/github-workflows/.github/workflows/deploy.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: ${{ vars.GAR_REGISTRY }}
