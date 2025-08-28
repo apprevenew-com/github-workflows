@@ -4,15 +4,15 @@ on:
   workflow_call:
     inputs:
       gcp_project_id:
+        type: string
         description: "GCP project ID"
         required: true
-        type: string
       gar_registry:
-        description: "GAR host (e.g. asia-southeast1-docker.pkg.dev)"
+        description: "GAR host (e.g. us-docker.pkg.dev)"
         required: true
         type: string
       gar_repository:
-        description: "GAR repository name (e.g. gcf-artifacts-folder)"
+        description: "GAR repository name (e.g. gcf-artifacts-ct)"
         required: false
         type: string
       image_name:
@@ -118,11 +118,7 @@ jobs:
 
       - id: img
         run: |
-          if [ -n "${{ env.GAR_REPOSITORY }}" ]; then
-            echo "repo=${GAR_REGISTRY}/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
-          else
-            echo "repo=${GAR_REGISTRY}/${GCP_PROJECT_ID}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
-          fi
+          echo "repo=${GAR_REGISTRY}/${GCP_PROJECT_ID}/${GAR_REPOSITORY}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
           if [ -n "${{ inputs.pr_number }}" ]; then
             echo "tag_sha=pr-${{ inputs.pr_number }}-${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
           elif [ -n "${{ env.TAG }}" ]; then
@@ -130,6 +126,14 @@ jobs:
           else
             echo "tag_sha=${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Debug repo & tag
+        run: |
+          echo "Repo: ${{ steps.img.outputs.repo }}"
+          echo "Tag:  ${{ steps.img.outputs.tag_sha }}"
+          echo "Push targets:"
+          echo "${{ steps.img.outputs.repo }}:${{ steps.img.outputs.tag_sha }}"
+          echo "${{ steps.img.outputs.repo }}:latest"
 
       - name: Build & Push image
         id: build
