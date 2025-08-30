@@ -4,11 +4,11 @@ on:
   workflow_call:
     inputs:
       gcp_project_id:
-        type: string
         description: "GCP project ID"
         required: true
+        type: string
       gar_registry:
-        description: "GAR host (e.g. us-docker.pkg.dev)"
+        description: "GAR host (e.g. asia-southeast1-docker.pkg.dev)"
         required: true
         type: string
       gar_repository:
@@ -126,14 +126,6 @@ jobs:
           else
             echo "tag_sha=${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
           fi
-
-      - name: Debug repo & tag
-        run: |
-          echo "Repo: ${{ steps.img.outputs.repo }}"
-          echo "Tag:  ${{ steps.img.outputs.tag_sha }}"
-          echo "Push targets:"
-          echo "${{ steps.img.outputs.repo }}:${{ steps.img.outputs.tag_sha }}"
-          echo "${{ steps.img.outputs.repo }}:latest"
 
       - name: Build & Push image
         id: build
