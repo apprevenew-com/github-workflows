@@ -1,4 +1,4 @@
-# Usage Examples
+# github-workflows
 
 ## deploy-gitops-gar
 
@@ -10,7 +10,7 @@ on:
 
 jobs:
   deploy:
-    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: ${{ vars.GAR_REGISTRY }}
@@ -33,8 +33,6 @@ jobs:
     uses: apprevenew-com/github-workflows/.github/workflows/release-on-merge-to-main.yml@v1
     secrets:
       PAT: ${{ secrets.PAT }}
-    with:
-      base-branch: "main"
 ```
 
 ## require-version-label
@@ -97,59 +95,4 @@ jobs:
     secrets:
       GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
       PAT: ${{ secrets.PAT }}
-
-```
-## lint
-```yml
-
-name: Lint
-on:
-  workflow_call:
-    inputs:
-      go-version:
-        required: true
-        type: string
-      golangci-lint-version:
-        required: true
-        type: string
-jobs:
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ inputs.go-version }}
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: ${{ inputs.golangci-lint-version }}
-
-```
-## test
-```yml
-
-name: Test
-on:
-  workflow_call:
-    inputs:
-      go-version:
-        required: true
-        type: string
-jobs:
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ inputs.go-version }}
-      - name: Run tests
-        run: go test -v -race ./...
 ```

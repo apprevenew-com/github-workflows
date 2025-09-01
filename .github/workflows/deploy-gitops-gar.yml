@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       gar_repository:
-        description: "GAR repository name (e.g. gcf-artifacts-ct)"
+        description: "GAR repository name (e.g. gcf-artifacts-folder)"
         required: false
         type: string
       image_name:
