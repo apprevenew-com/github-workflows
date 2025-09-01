@@ -60,6 +60,11 @@ on:
         required: false
         default: false
         type: boolean
+      pr_number:
+        description: "PR number for PR builds"
+        required: false
+        default: ""
+        type: string
     secrets:
       GAR_CREDENTIALS:
         required: true
@@ -81,22 +86,21 @@ jobs:
       repo: ${{ steps.img.outputs.repo }}
       image_digest: ${{ steps.ref.outputs.image_digest }}
 
-    if: |
-      startsWith(github.event.release.tag_name, inputs.tag_prefix) &&
-      (inputs.allow_prerelease || !github.event.release.prerelease)
+    if: github.event_name == 'pull_request'
 
     env:
       GAR_REGISTRY: ${{ inputs.gar_registry }}
-      GCP_PROJECT_ID:  ${{ inputs.gcp_project_id }}
-      IMAGE_NAME:   ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
-      TAG:          ${{ github.event.release.tag_name }}
-      PAT:          ${{ secrets.PAT }}  # used only if GitOps dispatch is enabled
+      GAR_REPOSITORY: ${{ inputs.gar_repository }}
+      GCP_PROJECT_ID: ${{ inputs.gcp_project_id }}
+      IMAGE_NAME: ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
+      TAG: ${{ github.event.release.tag_name }}
+      PAT: ${{ secrets.PAT }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || github.sha }}
 
       - id: git-sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -119,7 +123,13 @@ jobs:
           else
             echo "repo=${GAR_REGISTRY}/${GCP_PROJECT_ID}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
           fi
-          echo "tag_sha=${{ env.TAG }}-${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.pr_number }}" ]; then
+            echo "tag_sha=pr-${{ inputs.pr_number }}-${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+          elif [ -n "${{ env.TAG }}" ]; then
+            echo "tag_sha=${{ env.TAG }}-${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag_sha=${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build & Push image
         id: build
