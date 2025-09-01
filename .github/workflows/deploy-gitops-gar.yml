@@ -67,7 +67,7 @@ on:
         required: false
 
 concurrency:
-  group: deploy-${{ github.event.release.tag_name || github.run_id }}
+  group: deploy-${{ github.event.release.tag_name || github.run_id }}-${{ inputs.image_name }}
   cancel-in-progress: false
 
 jobs:
