@@ -1,4 +1,4 @@
-# github-workflows
+# Usage Examples
 
 ## deploy-gitops-gar
 
@@ -95,4 +95,59 @@ jobs:
     secrets:
       GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
       PAT: ${{ secrets.PAT }}
+
+```
+## lint
+```yml
+
+name: Lint
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        required: true
+        type: string
+      golangci-lint-version:
+        required: true
+        type: string
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: ${{ inputs.golangci-lint-version }}
+
+```
+## test
+```yml
+
+name: Test
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        required: true
+        type: string
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+      - name: Run tests
+        run: go test -v -race ./...
 ```
