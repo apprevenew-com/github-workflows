@@ -150,6 +150,9 @@ jobs:
   dispatch-gitops-repository:
     name: Dispatch to GitOps Repository
     needs: [build]
+    concurrency:
+      group: gitops-dispatch-${{ inputs.gitops_repository }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
 
     if: inputs.gitops_repository != ''
