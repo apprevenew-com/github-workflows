@@ -1,0 +1,200 @@
+name: Build & Push to GAR & Dispatch to GitOps Repository (Workflow Dispatch)
+
+on:
+  workflow_call:
+    inputs:
+      gcp_project_id:
+        description: "GCP project ID"
+        required: true
+        type: string
+      gar_registry:
+        description: "GAR host (e.g. asia-southeast1-docker.pkg.dev)"
+        required: true
+        type: string
+      gar_repository:
+        description: "GAR repository name (e.g. gcf-artifacts-folder)"
+        required: false
+        type: string
+      image_name:
+        description: "Image name; default = current repo name"
+        required: false
+        default: ""
+        type: string
+      tag_prefix:
+        description: "Deploy only if tag starts with this prefix"
+        required: false
+        default: "v"
+        type: string
+      dockerfile:
+        description: "Path to Dockerfile"
+        required: false
+        default: "Dockerfile"
+        type: string
+      context:
+        description: "Docker build context"
+        required: false
+        default: "."
+        type: string
+      gitops_repository:
+        description: "Target repo for repository_dispatch (e.g. your-org/gitops). Empty to skip."
+        required: false
+        default: ""
+        type: string
+      gitops_repository_event_type:
+        description: "Fixed event-type (e.g., image-updates-app). If empty, uses prefix+image_name."
+        required: false
+        default: ""
+        type: string
+      gitops_repository_event_prefix:
+        description: "Prefix for dynamic event-type (e.g., image-updates-)"
+        required: false
+        default: "image-updates-"
+        type: string
+      gitops_repository_include_app_field:
+        description: 'Whether to include {"app":"<image_name>"} in payload'
+        required: false
+        default: false
+        type: boolean
+      manual_tag:
+        description: "Tag to use for manual dispatch (required)"
+        required: true
+        type: string
+    secrets:
+      GAR_CREDENTIALS:
+        required: true
+      PAT:
+        required: false
+
+concurrency:
+  group: deploy-manual-${{ inputs.manual_tag }}-${{ inputs.image_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build & Push to GAR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    outputs:
+      tag_sha: ${{ steps.img.outputs.tag_sha }}
+      repo: ${{ steps.img.outputs.repo }}
+      image_digest: ${{ steps.ref.outputs.image_digest }}
+
+    if: |
+      startsWith(inputs.manual_tag, inputs.tag_prefix)
+
+    env:
+      GAR_REGISTRY: ${{ inputs.gar_registry }}
+      GCP_PROJECT_ID:  ${{ inputs.gcp_project_id }}
+      IMAGE_NAME:   ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
+      TAG:          ${{ inputs.manual_tag }}
+      PAT:          ${{ secrets.PAT }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.manual_tag }}
+
+      - id: git-sha
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - uses: google-github-actions/auth@v2
+        with:
+          create_credentials_file: true
+          credentials_json: ${{ secrets.GAR_CREDENTIALS }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker $GAR_REGISTRY --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: img
+        run: |
+          if [ -n "${{ inputs.gar_repository }}" ]; then
+            echo "repo=${GAR_REGISTRY}/${GCP_PROJECT_ID}/${{ inputs.gar_repository }}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          else
+            echo "repo=${GAR_REGISTRY}/${GCP_PROJECT_ID}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
+          fi
+          echo "tag_sha=${{ env.TAG }}-${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+
+      - name: Build & Push image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          push: true
+          build-args: |
+            GH_PAT=${{ secrets.PAT }}
+          tags: |
+            ${{ steps.img.outputs.repo }}:${{ steps.img.outputs.tag_sha }}
+            ${{ steps.img.outputs.repo }}:latest
+
+      - id: ref
+        run: echo "image_digest=${{ steps.img.outputs.repo }}@${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+
+  dispatch-gitops-repository:
+    name: Dispatch to GitOps Repository
+    needs: [build]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: gitops-dispatch-${{ inputs.gitops_repository }}
+      cancel-in-progress: false
+    if: inputs.gitops_repository != ''
+
+    env:
+      PAT: ${{ secrets.PAT }}
+      IMAGE_NAME: ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
+      TAG: ${{ inputs.manual_tag }}
+
+    steps:
+      - name: Compute event-type for GitOps repository
+        id: et
+        if: env.PAT != ''
+        run: |
+          if [ -n "${{ inputs.gitops_repository_event_type }}" ]; then
+            echo "event_type=${{ inputs.gitops_repository_event_type }}" >> $GITHUB_OUTPUT
+          else
+            echo "event_type=${{ inputs.gitops_repository_event_prefix }}${{ env.IMAGE_NAME }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build GitOps repository payload
+        id: ap
+        if: env.PAT != ''
+        run: |
+          TAG_SHA='${{ needs.build.outputs.tag_sha }}'
+          RELEASE_TAG='${{ env.TAG }}'
+          IMAGE_REPO='${{ needs.build.outputs.repo }}'
+          IMAGE_DIGEST='${{ needs.build.outputs.image_digest }}'
+          APP='${{ env.IMAGE_NAME }}'
+
+          jq -n \
+             --arg tag "$TAG_SHA" \
+             --arg image_ref "$IMAGE_DIGEST" \
+             --arg image_repo "$IMAGE_REPO" \
+             --arg image_tag_sha "$TAG_SHA" \
+             --arg release_tag "$RELEASE_TAG" \
+             --arg commit "${{ github.sha }}" \
+             '{tag:$tag, image_ref:$image_ref, image_repo:$image_repo, image_tag_sha:$image_tag_sha, release_tag:$release_tag, commit:$commit}' \
+             > payload.json
+
+          if [ "${{ inputs.gitops_repository_include_app_field }}" = "true" ]; then
+            jq --arg app "$APP" '. + {app:$app}' payload.json > payload.tmp && mv payload.tmp payload.json
+          fi
+
+          {
+            echo 'payload<<EOF'
+            cat payload.json
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: GitOps Repository Dispatch
+        if: env.PAT != ''
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ env.PAT }}
+          repository: ${{ inputs.gitops_repository }}
+          event-type: ${{ steps.et.outputs.event_type }}
+          client-payload: ${{ steps.ap.outputs.payload }}
