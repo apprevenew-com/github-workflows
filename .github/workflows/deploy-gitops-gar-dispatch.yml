@@ -16,14 +16,16 @@ on:
         required: false
         type: string
       image_name:
-        description: "Image name; default = current repo name"
-        required: false
-        default: ""
+        description: "Docker image name (e.g. service-api)"
+        required: true
         type: string
-      tag_prefix:
-        description: "Deploy only if tag starts with this prefix"
-        required: false
-        default: "v"
+      image_prefix:
+        description: "Docker image prefix (e.g. stable, staging-stable)"
+        required: true
+        type: string
+      git_tag:
+        description: "Git tag to checkout (e.g. v1.10.3). This tag must exist by the time this workflow is triggered."
+        required: true
         type: string
       dockerfile:
         description: "Path to Dockerfile"
@@ -55,10 +57,6 @@ on:
         required: false
         default: false
         type: boolean
-      manual_tag:
-        description: "Tag to use for manual dispatch (required)"
-        required: true
-        type: string
     secrets:
       GAR_CREDENTIALS:
         required: true
@@ -66,7 +64,7 @@ on:
         required: false
 
 concurrency:
-  group: deploy-manual-${{ inputs.manual_tag }}-${{ inputs.image_name }}
+  group: deploy-manual-${{ inputs.image_prefix }}-${{ inputs.image_name }}-${{ inputs.git_tag }}
   cancel-in-progress: false
 
 jobs:
@@ -76,25 +74,23 @@ jobs:
     timeout-minutes: 30
 
     outputs:
-      tag_sha: ${{ steps.img.outputs.tag_sha }}
+      docker_tag: ${{ steps.img.outputs.docker_tag }}
       repo: ${{ steps.img.outputs.repo }}
       image_digest: ${{ steps.ref.outputs.image_digest }}
 
-    if: |
-      startsWith(inputs.manual_tag, inputs.tag_prefix)
-
     env:
       GAR_REGISTRY: ${{ inputs.gar_registry }}
-      GCP_PROJECT_ID:  ${{ inputs.gcp_project_id }}
-      IMAGE_NAME:   ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
-      TAG:          ${{ inputs.manual_tag }}
-      PAT:          ${{ secrets.PAT }}
+      GCP_PROJECT_ID: ${{ inputs.gcp_project_id }}
+      IMAGE_NAME: ${{ inputs.image_name }}
+      IMAGE_PREFIX: ${{ inputs.image_prefix }}
+      GIT_TAG: ${{ inputs.git_tag }}
+      PAT: ${{ secrets.PAT }}
 
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ inputs.manual_tag }}
+          ref: ${{ inputs.git_tag }}
 
       - id: git-sha
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
@@ -117,7 +113,7 @@ jobs:
           else
             echo "repo=${GAR_REGISTRY}/${GCP_PROJECT_ID}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
           fi
-          echo "tag_sha=${{ env.TAG }}-${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
+          echo "docker_tag=${IMAGE_PREFIX}-${IMAGE_NAME}-${GIT_TAG}-${{ steps.git-sha.outputs.sha_short }}" >> $GITHUB_OUTPUT
 
       - name: Build & Push image
         id: build
@@ -129,7 +125,7 @@ jobs:
           build-args: |
             GH_PAT=${{ secrets.PAT }}
           tags: |
-            ${{ steps.img.outputs.repo }}:${{ steps.img.outputs.tag_sha }}
+            ${{ steps.img.outputs.repo }}:${{ steps.img.outputs.docker_tag }}
             ${{ steps.img.outputs.repo }}:latest
 
       - id: ref
@@ -146,8 +142,8 @@ jobs:
 
     env:
       PAT: ${{ secrets.PAT }}
-      IMAGE_NAME: ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
-      TAG: ${{ inputs.manual_tag }}
+      IMAGE_NAME: ${{ inputs.image_name }}
+      DOCKER_TAG: ${{ needs.build.outputs.docker_tag }}
 
     steps:
       - name: Compute event-type for GitOps repository
@@ -164,18 +160,17 @@ jobs:
         id: ap
         if: env.PAT != ''
         run: |
-          TAG_SHA='${{ needs.build.outputs.tag_sha }}'
-          RELEASE_TAG='${{ env.TAG }}'
+          DOCKER_TAG='${{ env.DOCKER_TAG }}'
           IMAGE_REPO='${{ needs.build.outputs.repo }}'
           IMAGE_DIGEST='${{ needs.build.outputs.image_digest }}'
           APP='${{ env.IMAGE_NAME }}'
 
           jq -n \
-             --arg tag "$TAG_SHA" \
+             --arg tag "$DOCKER_TAG" \
              --arg image_ref "$IMAGE_DIGEST" \
              --arg image_repo "$IMAGE_REPO" \
-             --arg image_tag_sha "$TAG_SHA" \
-             --arg release_tag "$RELEASE_TAG" \
+             --arg image_tag_sha "$DOCKER_TAG" \
+             --arg release_tag "${{ inputs.git_tag }}" \
              --arg commit "${{ github.sha }}" \
              '{tag:$tag, image_ref:$image_ref, image_repo:$image_repo, image_tag_sha:$image_tag_sha, release_tag:$release_tag, commit:$commit}' \
              > payload.json
