@@ -82,8 +82,8 @@ jobs:
       image_digest: ${{ steps.ref.outputs.image_digest }}
 
     if: |
-      (github.event_name == 'release' && startsWith(github.event.release.tag_name, inputs.tag_prefix) && (inputs.allow_prerelease || !github.event.release.prerelease)) ||
-      (github.event_name == 'workflow_call' && inputs.manual_tag != '' && startsWith(inputs.manual_tag, inputs.tag_prefix))
+      startsWith(github.event.release.tag_name, inputs.tag_prefix) &&
+      (inputs.allow_prerelease || !github.event.release.prerelease)
 
     env:
       GAR_REGISTRY: ${{ inputs.gar_registry }}
