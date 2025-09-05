@@ -11,7 +11,7 @@ on:
 
 jobs:
   deploy:
-    uses: apprevenew-com/github-workflows/.github/workflows/deploy.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-release.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: ${{ vars.GAR_REGISTRY }}
@@ -65,7 +65,7 @@ jobs:
   build-service-1:
     name: Build & Push service-1
     if: contains(github.event.pull_request.labels.*.name, 'deploy:stage')
-    uses: apprevenew-com/bt-github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
@@ -85,7 +85,7 @@ jobs:
   build-service-2:
     name: Build & Push service-2
     if: contains(github.event.pull_request.labels.*.name, 'deploy:stage')
-    uses: apprevenew-com/bt-github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
@@ -105,7 +105,7 @@ jobs:
   build-service-3:
     name: Build & Push service-3
     if: contains(github.event.pull_request.labels.*.name, 'deploy:stage')
-    uses: apprevenew-com/bt-github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
@@ -125,7 +125,7 @@ jobs:
   build-service-4:
     name: Build & Push service-4
     if: contains(github.event.pull_request.labels.*.name, 'deploy:stage')
-    uses: apprevenew-com/bt-github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
@@ -187,7 +187,7 @@ jobs:
   build-service-1:
     name: Build service-1
     needs: get-latest-release
-    uses: apprevenew-com/bt-github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
@@ -207,7 +207,7 @@ jobs:
   build-service-2:
     name: Build service-2
     needs: get-latest-release
-    uses: apprevenew-com/bt-github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
@@ -227,7 +227,7 @@ jobs:
   build-service-3:
     name: Build service-3
     needs: get-latest-release
-    uses: apprevenew-com/bt-github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
@@ -247,7 +247,7 @@ jobs:
   build-service-4:
     name: Build service-4
     needs: get-latest-release
-    uses: apprevenew-com/bt-github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
@@ -263,4 +263,28 @@ jobs:
     secrets:
       GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
       PAT: ${{ secrets.PAT }}
+```
+
+## ci
+This workflow provides continuous integration checks for pull requests. It runs linting with `golangci-lint` and executes Go tests, ensuring code quality and correctness before merging.
+
+```yml
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  lint:
+    uses: apprevenew-com/github-workflows/.github/workflows/lint-go-app.yml@v1.5
+    with:
+      go-version: '1.25'
+      golangci-lint-version: 'v2.4'
+
+  test:
+    uses: apprevenew-com/github-workflows/.github/workflows/test-go-app.yml@v1.5
+    with:
+      go-version: '1.25'
 ```
