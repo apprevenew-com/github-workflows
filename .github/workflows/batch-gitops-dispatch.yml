@@ -40,6 +40,6 @@ jobs:
               "event_type": "${{ inputs.gitops_repository_event_type }}",
               "client_payload": {
                 "deployment_type": "${{ inputs.deployment_type }}",
-                "apps": ${{ inputs.apps_json }}
+                "apps": ${{ toJson(inputs.apps_json) }}
               }
             }'
