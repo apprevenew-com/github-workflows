@@ -1,6 +1,7 @@
 # Usage Examples
 
 ## deploy-gitops-gar
+This workflow is used to deploy a new release to a GitOps repository and push images to Google Artifact Registry. It triggers on GitHub release events and updates the target environment automatically.
 
 ```yml
 name: Deploy
@@ -10,7 +11,7 @@ on:
 
 jobs:
   deploy:
-    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar.yml@v1
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-release.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: ${{ vars.GAR_REGISTRY }}
@@ -21,6 +22,7 @@ jobs:
 ```
 
 ## release-on-merge-to-main
+This workflow automatically creates a release when a pull request to the main branch is merged. It ensures that production-ready code is released consistently.
 
 ```yml
 name: Release on merge to main
@@ -33,11 +35,10 @@ jobs:
     uses: apprevenew-com/github-workflows/.github/workflows/release-on-merge-to-main.yml@v1
     secrets:
       PAT: ${{ secrets.PAT }}
-    with:
-      base-branch: "main"
 ```
 
 ## require-version-label
+This workflow enforces version labeling on pull requests. It blocks merging unless a version label (e.g., vX.Y.Z) is present, ensuring consistent version control and releases.
 
 ```yml
 name: Require version label
@@ -50,106 +51,240 @@ jobs:
     uses: apprevenew-com/github-workflows/.github/workflows/require-version-label.yml@v1
 ```
 
-## build-and-push-pr-to-stage
+## build-and-push-to-stage-from-pr
+This workflow builds and pushes temporary staging images for multiple services whenever a pull request is opened or labeled for staging deployment. It helps validate changes in a staging environment before production release.
 
 ```yml
-name: Build and Push PR to Stage
+name: Build and Push to Stage from PR
 
 on:
   pull_request:
     types: [opened, labeled]
 
 jobs:
-  prepare:
+  build-service-1:
+    name: Build & Push service-1
     if: contains(github.event.pull_request.labels.*.name, 'deploy:stage')
-    runs-on: ubuntu-latest
-    outputs:
-      pr_tag: ${{ steps.set.outputs.pr_tag }}
-      sha_short: ${{ steps.set.outputs.sha_short }}
-      project_id: ${{ steps.set.outputs.project_id }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - id: set
-        run: |
-          sha_short=$(git rev-parse --short HEAD)
-          echo "sha_short=$sha_short" >> $GITHUB_OUTPUT
-          echo "pr_tag=temporary-pr-staging-$sha_short" >> $GITHUB_OUTPUT
-          echo "project_id=${{ vars.GCP_PROJECT_ID }}" >> $GITHUB_OUTPUT
-
-  call-ci-dispatch:
-    needs: prepare
-    uses: ./.github/workflows/deploy.yml
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
     with:
       gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
       gar_registry: us-docker.pkg.dev
-      gar_repository: gcf-artifacts-ct
-      image_name: case-tracker-api
-      dockerfile: cmd/services/api/Dockerfile
+      gar_repository: gcf-artifacts-service
+      image_name: service-1
+      image_prefix: temporary-staging
+      pr_number: ${{ github.event.pull_request.number }}
+      dockerfile: cmd/services/service-1/Dockerfile
       context: .
       gitops_repository: ${{ vars.GITOPS_REPOSITORY }}
       gitops_repository_event_type: image-update
       gitops_repository_include_app_field: true
-      allow_prerelease: true
-      pr_number: ${{ github.event.pull_request.number }}
     secrets:
       GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
       PAT: ${{ secrets.PAT }}
 
-```
-## lint
-```yml
+  build-service-2:
+    name: Build & Push service-2
+    if: contains(github.event.pull_request.labels.*.name, 'deploy:stage')
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
+    with:
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gar_registry: us-docker.pkg.dev
+      gar_repository: gcf-artifacts-service
+      image_name: service-2
+      image_prefix: temporary-staging
+      pr_number: ${{ github.event.pull_request.number }}
+      dockerfile: cmd/services/service-2/Dockerfile
+      context: .
+      gitops_repository: ${{ vars.GITOPS_REPOSITORY }}
+      gitops_repository_event_type: image-update
+      gitops_repository_include_app_field: true
+    secrets:
+      GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
+      PAT: ${{ secrets.PAT }}
 
-name: Lint
+  build-service-3:
+    name: Build & Push service-3
+    if: contains(github.event.pull_request.labels.*.name, 'deploy:stage')
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
+    with:
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gar_registry: us-docker.pkg.dev
+      gar_repository: gcf-artifacts-service
+      image_name: service-3
+      image_prefix: temporary-staging
+      pr_number: ${{ github.event.pull_request.number }}
+      dockerfile: cmd/services/service-3/Dockerfile
+      context: .
+      gitops_repository: ${{ vars.GITOPS_REPOSITORY }}
+      gitops_repository_event_type: image-update
+      gitops_repository_include_app_field: true
+    secrets:
+      GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
+      PAT: ${{ secrets.PAT }}
+
+  build-service-4:
+    name: Build & Push service-4
+    if: contains(github.event.pull_request.labels.*.name, 'deploy:stage')
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-pr.yml@v1
+    with:
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gar_registry: us-docker.pkg.dev
+      gar_repository: gcf-artifacts-service
+      image_name: service-4
+      image_prefix: temporary-staging
+      pr_number: ${{ github.event.pull_request.number }}
+      dockerfile: cmd/service-4/Dockerfile
+      context: .
+      gitops_repository: ${{ vars.GITOPS_REPOSITORY }}
+      gitops_repository_event_type: image-update
+      gitops_repository_include_app_field: true
+    secrets:
+      GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
+      PAT: ${{ secrets.PAT }}
+```
+
+## build-and-push-to-prod
+This workflow builds and pushes stable production images for multiple services. It is manually triggered and always uses the latest release tag to ensure that production builds are traceable and reproducible.
+
+```yml
+name: Build and Push to PROD
+
 on:
-  workflow_call:
-    inputs:
-      go-version:
-        required: true
-        type: string
-      golangci-lint-version:
-        required: true
-        type: string
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.repository }}-manual
+  cancel-in-progress: false
+
+jobs:
+  get-latest-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version_tag: ${{ steps.get_release.outputs.version_tag }}
+      sha_short: ${{ steps.git_sha.outputs.sha_short }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Get latest release tag
+        id: get_release
+        run: |
+          set -euo pipefail
+          PREFIX="v"
+          LATEST_TAG=$(git tag --list "${PREFIX}[0-9]*" --sort=-v:refname                        | grep -E "^${PREFIX}[0-9]+\.[0-9]+\.[0-9]+$"                        | head -n1)
+          if [ -z "$LATEST_TAG" ]; then
+            echo "::error::No release tags found matching pattern ${PREFIX}x.y.z"
+            exit 1
+          fi
+          echo "Found latest release: $LATEST_TAG"
+          echo "version_tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+
+      - name: Get Git SHA
+        id: git_sha
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+  build-service-1:
+    name: Build service-1
+    needs: get-latest-release
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
+    with:
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gar_registry: us-docker.pkg.dev
+      gar_repository: gcf-artifacts-service
+      image_name: service-1
+      image_prefix: stable
+      git_tag: ${{ needs.get-latest-release.outputs.version_tag }}
+      dockerfile: cmd/services/service-1/Dockerfile
+      context: .
+      gitops_repository: ${{ vars.GITOPS_REPOSITORY }}
+      gitops_repository_event_type: image-update
+      gitops_repository_include_app_field: true
+    secrets:
+      GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
+      PAT: ${{ secrets.PAT }}
+
+  build-service-2:
+    name: Build service-2
+    needs: get-latest-release
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
+    with:
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gar_registry: us-docker.pkg.dev
+      gar_repository: gcf-artifacts-service
+      image_name: service-2
+      image_prefix: stable
+      git_tag: ${{ needs.get-latest-release.outputs.version_tag }}
+      dockerfile: cmd/services/service-2/Dockerfile
+      context: .
+      gitops_repository: ${{ vars.GITOPS_REPOSITORY }}
+      gitops_repository_event_type: image-update
+      gitops_repository_include_app_field: true
+    secrets:
+      GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
+      PAT: ${{ secrets.PAT }}
+
+  build-service-3:
+    name: Build service-3
+    needs: get-latest-release
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
+    with:
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gar_registry: us-docker.pkg.dev
+      gar_repository: gcf-artifacts-service
+      image_name: service-3
+      image_prefix: stable
+      git_tag: ${{ needs.get-latest-release.outputs.version_tag }}
+      dockerfile: cmd/services/service-3/Dockerfile
+      context: .
+      gitops_repository: ${{ vars.GITOPS_REPOSITORY }}
+      gitops_repository_event_type: image-update
+      gitops_repository_include_app_field: true
+    secrets:
+      GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
+      PAT: ${{ secrets.PAT }}
+
+  build-service-4:
+    name: Build service-4
+    needs: get-latest-release
+    uses: apprevenew-com/github-workflows/.github/workflows/deploy-gitops-gar-dispatch.yml@v1
+    with:
+      gcp_project_id: ${{ vars.GCP_PROJECT_ID }}
+      gar_registry: us-docker.pkg.dev
+      gar_repository: gcf-artifacts-service
+      image_name: service-4
+      image_prefix: stable
+      git_tag: ${{ needs.get-latest-release.outputs.version_tag }}
+      dockerfile: cmd/service-4/Dockerfile
+      context: .
+      gitops_repository: ${{ vars.GITOPS_REPOSITORY }}
+      gitops_repository_event_type: image-update
+      gitops_repository_include_app_field: true
+    secrets:
+      GAR_CREDENTIALS: ${{ secrets.GAR_CREDENTIALS }}
+      PAT: ${{ secrets.PAT }}
+```
+
+## Lint and Test go app
+This workflow provides continuous integration checks for pull requests. It runs linting with `golangci-lint` and executes Go tests, ensuring code quality and correctness before merging.
+
+```yml
+name: Lint and Test go app
+
+on:
+  pull_request:
+    branches:
+      - '**'
+
 jobs:
   lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ inputs.go-version }}
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v8
-        with:
-          version: ${{ inputs.golangci-lint-version }}
+    uses: apprevenew-com/github-workflows/.github/workflows/lint-go-app.yml@v1.5
+    with:
+      go-version: '1.25'
+      golangci-lint-version: 'v2.4'
 
-```
-## test
-```yml
-
-name: Test
-on:
-  workflow_call:
-    inputs:
-      go-version:
-        required: true
-        type: string
-jobs:
   test:
-    name: Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ${{ inputs.go-version }}
-      - name: Run tests
-        run: go test -v -race ./...
+    uses: apprevenew-com/github-workflows/.github/workflows/test-go-app.yml@v1.5
+    with:
+      go-version: '1.25'
 ```
