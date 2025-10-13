@@ -142,7 +142,6 @@ jobs:
             GH_PAT=${{ secrets.PAT }}
           tags: |
             ${{ steps.img.outputs.repo }}:${{ steps.img.outputs.tag_sha }}
-            ${{ steps.img.outputs.repo }}:latest
 
       - id: ref
         run: echo "image_digest=${{ steps.img.outputs.repo }}@${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
