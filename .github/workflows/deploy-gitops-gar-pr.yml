@@ -27,6 +27,11 @@ on:
         description: "PR number"
         required: true
         type: string
+      git_ref:
+        description: "Git ref to checkout (commit SHA)"
+        required: false
+        type: string
+        default: ""
       dockerfile:
         description: "Path to Dockerfile"
         required: false
@@ -89,6 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.git_ref != '' && inputs.git_ref || github.sha }}
           fetch-depth: 0
 
       - id: git-sha
