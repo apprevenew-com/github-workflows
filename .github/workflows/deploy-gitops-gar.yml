@@ -35,6 +35,11 @@ on:
         required: false
         default: "Dockerfile"
         type: string
+      go_private_registry:
+        description: "Go private registry passed as docker build arg (GO_PRIVATE_REGISTRY)"
+        required: false
+        default: ""
+        type: string
       context:
         description: "Docker build context"
         required: false
@@ -87,10 +92,10 @@ jobs:
 
     env:
       GAR_REGISTRY: ${{ inputs.gar_registry }}
-      GCP_PROJECT_ID:  ${{ inputs.gcp_project_id }}
-      IMAGE_NAME:   ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
-      TAG:          ${{ github.event.release.tag_name }}
-      PAT:          ${{ secrets.PAT }}  # used only if GitOps dispatch is enabled
+      GCP_PROJECT_ID: ${{ inputs.gcp_project_id }}
+      IMAGE_NAME: ${{ inputs.image_name != '' && inputs.image_name || github.event.repository.name }}
+      TAG: ${{ github.event.release.tag_name }}
+      PAT: ${{ secrets.PAT }} # used only if GitOps dispatch is enabled
 
     steps:
       - uses: actions/checkout@v4
@@ -130,6 +135,7 @@ jobs:
           push: true
           build-args: |
             GH_PAT=${{ secrets.PAT }}
+            GO_PRIVATE_REGISTRY=${{ inputs.go_private_registry }}
           tags: |
             ${{ steps.img.outputs.repo }}:${{ steps.img.outputs.tag_sha }}
             ${{ steps.img.outputs.repo }}:latest

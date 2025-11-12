@@ -35,6 +35,11 @@ on:
         required: false
         default: "Dockerfile"
         type: string
+      go_private_registry:
+        description: "Go private registry passed as docker build arg (GO_PRIVATE_REGISTRY)"
+        required: false
+        default: ""
+        type: string
       context:
         description: "Docker build context"
         required: false
@@ -140,6 +145,7 @@ jobs:
           push: true
           build-args: |
             GH_PAT=${{ secrets.PAT }}
+            GO_PRIVATE_REGISTRY=${{ inputs.go_private_registry }}
           tags: |
             ${{ steps.img.outputs.repo }}:${{ steps.img.outputs.tag_sha }}
 
