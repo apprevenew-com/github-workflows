@@ -35,11 +35,6 @@ on:
         required: false
         default: "Dockerfile"
         type: string
-      go_private_registry:
-        description: "Go private registry passed as docker build arg (GO_PRIVATE_REGISTRY)"
-        required: false
-        default: ""
-        type: string
       context:
         description: "Docker build context"
         required: false
@@ -69,6 +64,9 @@ on:
       GAR_CREDENTIALS:
         required: true
       PAT:
+        required: false
+      GO_PRIVATE_REGISTRY:
+        description: "Go private registry passed as docker build arg (GO_PRIVATE_REGISTRY)"
         required: false
 
 concurrency:
@@ -135,7 +133,7 @@ jobs:
           push: true
           build-args: |
             GH_PAT=${{ secrets.PAT }}
-            GO_PRIVATE_REGISTRY=${{ inputs.go_private_registry }}
+            GO_PRIVATE_REGISTRY=${{ secrets.GO_PRIVATE_REGISTRY }}
           tags: |
             ${{ steps.img.outputs.repo }}:${{ steps.img.outputs.tag_sha }}
             ${{ steps.img.outputs.repo }}:latest
